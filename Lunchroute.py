@@ -94,7 +94,7 @@ def create_map(_gdf, _nodes, _df_route = None, route = False, distance = 0, scor
 
 
 
-st.title("Loopplezierkaart")
+st.title("Loopplezierkaart!!!")
 st.write("Welkom bij de loopplezierkaart van de Hogeschool van Amsterdam. Kies in het menu links welke omgevingsfactoren je wil laten meewegen in de loopbaarheidsscore. Klik op 'Calculate' en bekijk de kaart (groen is aantrekkelijk, geel is neutraal en rood is minder aantrekkelijk).")
 st.write("Je kan waarnemingen van dieren en planten op de kaart tonen door het vinkje aan te zetten. Bekijk zo wat je onderweg allemaal tegenkomt.")
 st.write("De zwarte punten zijn knooppunten met een id. Als je twee knooppunten kiest en de id's invult in het menu kan je ook de meest aantrekkelijke route bereken tussen de twee punten a.d.v. de eerder gekozen score. Klik op 'Add route' om jouw gepersonaliseerde route te tonen")
