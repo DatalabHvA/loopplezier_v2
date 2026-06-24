@@ -19,13 +19,20 @@ def generate_routes(
     L_min,
     L_max,
     max_lens=[10, 25, 50, 100, 250],
-    k_best=50
+    k_best=50,
+    t_budget=20.0,
 ):
+    import time as _time
+    t_deadline = _time.perf_counter() + t_budget
+
     gdf_sub = gdf[['u','v','length','score_totaal','wel_bankjes']]
 
     all_labels = []
 
     for ml in max_lens:
+
+        if _time.perf_counter() > t_deadline:
+            break
 
         res = pareto_paths_bankjes_gap(
             gdf_sub,
@@ -36,6 +43,7 @@ def generate_routes(
             epsilon=0.01,
             k_best=k_best,
             max_len=ml,
+            t_deadline=t_deadline,
         )
 
         all_labels.extend(res)
@@ -174,7 +182,8 @@ def pareto_paths_bankjes_gap(
     epsilon=0.0,
     k_best=50,
     max_len=200,
-    neighbor_limit=None
+    neighbor_limit=None,
+    t_deadline=None,
 ):
 
     # =========================
@@ -222,10 +231,18 @@ def pareto_paths_bankjes_gap(
     # MAIN LOOP
     # =========================
 
+    import time as _time
+    _pop = 0
+
     while pq:
 
         if len(pq) > 50000:
             pq = heapq.nsmallest(25000, pq)
+
+        _pop += 1
+        if t_deadline is not None and not (_pop & 8191):
+            if _time.perf_counter() > t_deadline:
+                break
 
         _, (node, L, S, B, curr_gap, max_gap, path, visited) = heapq.heappop(pq)
 
@@ -514,7 +531,8 @@ def pareto_to_df(pareto):
                     "id": i,
                     "max_gap": gap,
                     "gemiddelde_score": S / L,
-					"afstand": L,   
+                    "afstand": L,
+                    "route": p[6],
                 })
 
         except Exception:
@@ -600,7 +618,8 @@ def pareto_paths_2d_ultrafast(
     epsilon=0.01,
     k_best=50,
     max_len=50,
-    neighbor_limit=7
+    neighbor_limit=7,
+    t_deadline=None,
 ):
 
     # =====================================================
@@ -708,11 +727,20 @@ def pareto_paths_2d_ultrafast(
     # main loop
     # =====================================================
 
+    import time as _time
+    _pop = 0
+
     while pq:
 
         # memory protection
         if len(pq) > 20000:
             pq = heapq.nsmallest(10000, pq)
+
+        # tijdslimiet: elke 8192 pops via bitwise AND (geen modulo-overhead)
+        _pop += 1
+        if t_deadline is not None and not (_pop & 8191):
+            if _time.perf_counter() > t_deadline:
+                break
 
         _, (
             node,
@@ -942,12 +970,18 @@ def generate_pareto_routes_2d(
     end,
     L_min,
     L_max,
-    max_lens=[10,25,50,100,250]
+    max_lens=[10,25,50,100,250],
+    t_budget=20.0,
 ):
+    import time as _time
+    t_deadline = _time.perf_counter() + t_budget
 
     all_labels = []
 
     for ml in max_lens:
+
+        if _time.perf_counter() > t_deadline:
+            break
 
         res = pareto_paths_2d_ultrafast(
             gdf=gdf,
@@ -958,7 +992,8 @@ def generate_pareto_routes_2d(
             epsilon=0.01,
             k_best=50,
             max_len=ml,
-            neighbor_limit=7
+            neighbor_limit=7,
+            t_deadline=t_deadline,
         )
 
         all_labels.extend(res)

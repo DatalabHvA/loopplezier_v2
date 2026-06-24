@@ -99,7 +99,8 @@ def pareto_paths(
     epsilon=0.0,
     k_best=100,
     max_len=200,
-    neighbor_limit=None
+    neighbor_limit=None,
+    t_deadline=None,
 ):
 
     # =====================================================
@@ -227,10 +228,18 @@ def pareto_paths(
     # MAIN LOOP
     # =====================================================
 
+    import time as _time
+    _pop = 0
+
     while pq:
 
-        # if len(pq) > 50000:
-        #     pq = heapq.nsmallest(25000, pq)
+        if len(pq) > 20000:
+            pq = heapq.nsmallest(10000, pq)
+
+        _pop += 1
+        if t_deadline is not None and not (_pop & 8191):
+            if _time.perf_counter() > t_deadline:
+                break
 
         _, (
             node,
@@ -408,10 +417,16 @@ def pareto_paths(
     ]
 
     return end_labels
-def generate_pareto_routes_2d(gdf, start, end, L_min, L_max, max_lens):
+def generate_pareto_routes_2d(gdf, start, end, L_min, L_max, max_lens=[10, 25, 50, 100, 250], t_budget=20.0):
+    import time as _time
+    t_deadline = _time.perf_counter() + t_budget
+
     all_labels = []
 
     for ml in max_lens:
+
+        if _time.perf_counter() > t_deadline:
+            break
 
         res = pareto_paths(
             gdf,
@@ -419,7 +434,8 @@ def generate_pareto_routes_2d(gdf, start, end, L_min, L_max, max_lens):
             end=end,
             L_min=L_min,
             L_max=L_max,
-            max_len=ml
+            max_len=ml,
+            t_deadline=t_deadline,
         )
 
         all_labels.extend(res)
