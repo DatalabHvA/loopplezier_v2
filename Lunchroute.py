@@ -77,35 +77,67 @@ def route_layer(_df_route):
 st.title("Loopplezierkaart")
 st.caption("Hogeschool van Amsterdam — Verken en vergelijk wandelroutes op basis van jouw persoonlijke score")
 
+with st.expander("Over deze kaart — wat zie ik hier?"):
+    st.markdown("""
+De **Loopplezierkaart** laat zien hoe prettig het is om ergens in Amsterdam te wandelen.
+Elk straatsegment heeft een score die is opgebouwd uit omgevingsfactoren: bomen, water,
+horeca, verkeerslichten, drukke wegen, enzovoort.
+
+**Jouw eigen score**
+In het menu links geef je elke factor een gewicht tussen –10 en +10. Een positief gewicht
+maakt een straat aantrekkelijker, een negatief gewicht juist minder. Klik op **Calculate**
+om de kaart opnieuw te kleuren:
+🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
+
+**Een route berekenen**
+De zwarte punten op de kaart zijn knooppunten, elk met een eigen nummer — beweeg je muis
+over een punt om het nummer te zien. Vul een start- en eindknooppunt in, kies een minimale
+en maximale afstand, en klik op **Add route**.
+
+**Het Pareto-front**
+Er is zelden één "beste" route: een route met een hogere score is vaak ook langer. Het
+algoritme zoekt daarom alle routes die je niet kunt verbeteren zonder op de andere as in
+te leveren — samen vormen die het *Pareto-front*. De grafiek rechts van de kaart toont
+deze alternatieven; klik op een punt om die route op de kaart te tonen.
+    """)
+
 (gdf, nodes) = load_data()
 
 # Sidebar
 st.sidebar.header("Omgevingsfactoren")
-st.sidebar.caption("Gebruik –10 tot +10 om factoren mee te laten wegen in de routescore.")
+st.sidebar.caption("Geef elke factor een gewicht van –10 tot +10.")
 
 with st.sidebar.form("Score input"):
-    ovl = st.number_input("Openbare verlichting", -10, 10, 0, 1, key="ovl")
-    bomen = st.number_input("Bomen", -10, 10, 1, 1, key="bomen")
-    water = st.number_input("Water", -10, 10, -1, 1, key="water")
-    monumenten = st.number_input("Monumenten", -10, 10, 0, 1, key="monumenten")
-    wegen = st.number_input("Drukke wegen", -10, 10, 0, 1, key="wegen")
-    parken = st.number_input("Parken", -10, 10, 0, 1, key="parken")
-    verkeerslichten = st.number_input("Verkeerslichten", -10, 10, -1, 1, key="verkeerslichten")
-    horeca = st.number_input("Horeca", -10, 10, 1, 1, key="horeca")
-    winkels = st.number_input("Winkels", -10, 10, 0, 1, key="winkels")
-    groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
-    schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
-    ov = st.number_input("Openbaar vervoer", -10, 10, 1, 1, key="ov")
+    with st.expander("Groen & natuur"):
+        bomen = st.number_input("Bomen", -10, 10, 1, 1, key="bomen")
+        parken = st.number_input("Parken", -10, 10, 0, 1, key="parken")
+        groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
+        water = st.number_input("Water", -10, 10, -1, 1, key="water")
+        schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
+
+    with st.expander("Voorzieningen"):
+        horeca = st.number_input("Horeca", -10, 10, 1, 1, key="horeca")
+        winkels = st.number_input("Winkels", -10, 10, 0, 1, key="winkels")
+        ov = st.number_input("Openbaar vervoer", -10, 10, 1, 1, key="ov")
+        monumenten = st.number_input("Monumenten", -10, 10, 0, 1, key="monumenten")
+
+    with st.expander("Veiligheid & comfort"):
+        ovl = st.number_input("Openbare verlichting", -10, 10, 0, 1, key="ovl")
+        verkeerslichten = st.number_input("Verkeerslichten", -10, 10, -1, 1, key="verkeerslichten")
+        wegen = st.number_input("Drukke wegen", -10, 10, 0, 1, key="wegen")
+
     calculate_button = st.form_submit_button("Calculate", use_container_width=True)
 
 st.sidebar.divider()
 st.sidebar.subheader("Route berekenen")
 
 with st.sidebar.form("Route"):
-    start = st.number_input("Start knooppunt", 0, 3100, 924, 1, key="start")
-    end = st.number_input("Eind knooppunt", 0, 3100, 1145, 1, key="end")
-    min_dist = st.number_input("Minimale afstand (m)", 500, 10000, 500, 100, key="min_dist")
-    max_dist = st.number_input("Maximale afstand (m)", 500, 10000, 3000, 100, key="max_dist")
+    c1, c2 = st.columns(2)
+    start = c1.number_input("Start", 0, 3100, 924, 1, key="start")
+    end = c2.number_input("Eind", 0, 3100, 1145, 1, key="end")
+    c3, c4 = st.columns(2)
+    min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
+    max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
     add_route = st.form_submit_button("Add route", use_container_width=True)
 
 weights = dict(
@@ -170,9 +202,13 @@ gdf = calculate_new_column(gdf, **current_weights)
 col_map, col_side = st.columns([3, 2], gap="medium")
 
 with col_map:
+    # Een lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
+    # laag niet weg als je None doorgeeft, waardoor een gewiste route zichtbaar
+    # bleef. Met een lege groep wordt de oude vervangen zonder de hele kaart
+    # opnieuw te renderen.
     st_folium(
         base_map(gdf, nodes, current_weights),
-        feature_group_to_add=route_layer(df_route) if route else None,
+        feature_group_to_add=route_layer(df_route) if route else folium.FeatureGroup(name="Route"),
         width=700, height=620, returned_objects=[], key="home_map",
     )
 
@@ -205,21 +241,16 @@ with col_side:
             ss["home_pos"] = clicked
             st.rerun()
     else:
-        st.markdown("### Hoe werkt het?")
+        st.markdown("### Zo begin je")
         st.markdown("""
-**1. Stel gewichten in** via het menu links
-Kies welke omgevingsfactoren je belangrijk vindt — positief of negatief.
+**1.** Stel links de gewichten in en klik **Calculate** — de kaart kleurt mee.
 
-**2. Klik Calculate**
-De kaart kleurt op basis van jouw score:
-🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder
+**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
 
-**3. Kies twee knooppunten**
-De zwarte punten op de kaart hebben elk een nummer.
-Noteer het nummer van je start- en eindpunt.
-
-**4. Klik Add route**
-Het algoritme berekent routes op het **Pareto-front**: optimaal in zowel score als afstand.
-Hier verschijnt dan een interactieve grafiek — klik op elk punt om
-die route direct op de kaart te bekijken.
+**3.** Vul beide nummers links in en klik **Add route**.
         """)
+        st.info(
+            "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "
+            "Klik op een punt om die route op de kaart te bekijken.",
+            icon="📊",
+        )

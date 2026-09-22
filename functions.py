@@ -1069,11 +1069,17 @@ def plot_pareto_2d(
         )
 
     fig.update_layout(
-        title="Alle mogelijke ideale lunchroutes",
         xaxis_title="Afstand (m)",
         yaxis_title="Gemiddelde omgevingsscore",
         template="plotly_white",
-        hovermode="closest"
+        hovermode="closest",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=360,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
+        ),
     )
 
     return fig
