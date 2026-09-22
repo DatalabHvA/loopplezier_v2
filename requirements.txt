@@ -1,3 +1,5 @@
 geopandas
 streamlit_folium 
 matplotlib
+scipy
+pareto_select
