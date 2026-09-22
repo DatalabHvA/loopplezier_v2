@@ -2,3 +2,4 @@ geopandas
 streamlit_folium 
 matplotlib
 scipy
+networkx
