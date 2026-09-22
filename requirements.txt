@@ -1,2 +1,3 @@
 geopandas
 streamlit_folium 
+matplotlib
