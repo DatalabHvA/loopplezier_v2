@@ -3,247 +3,246 @@ import pandas as pd
 import geopandas as gpd
 from streamlit_folium import st_folium
 import folium
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
-from functions_verplichte_punten import * 
+from functions_verplichte_punten import *
 import numpy as np
-import matplotlib.pyplot as plt
-from shapely.ops import linemerge
-from streamlit_plotly_events import plotly_events
-st.set_page_config(layout = 'wide')
+from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
+
+st.set_page_config(layout='wide')
+
+
+@st.cache_data(show_spinner="Route berekenen...")
+def _cached_mandatory_route(_gdf, start, end, mandatory, max_dist, wkey):
+    """Cache de GRASP-route per combinatie van start/eind/tussenpunten/afstand/gewichten.
+
+    GRASP is gerandomiseerd; door te cachen krijg je bij dezelfde invoer ook
+    dezelfde route terug in plaats van elke rerun een andere.
+    """
+    return calculate_mandatory_route(
+        gdf=_gdf,
+        start=start,
+        end=end,
+        mandatory_nodes=list(mandatory),
+        max_dist=max_dist,
+    )
+
+
 @st.cache_data
 def load_data():
-	gdf = gpd.read_feather('./data/gdf.feather')
-	gdf = gdf.reset_index(drop = True)
-	gdf = calculate_new_column(gdf, ovl = 0, bomen = 1, water = -1, monumenten = 0, wegen = 0, parken = 0, toiletten = 0, verkeerslichten = -1, wegdekkwaliteit = 0, horeca = 1, kerk = 0, winkels = 0, groen = 0, kampioen = 0, waarnemingen = 0,ov = 1, schaduw = 0)
-	
-	nodes = gpd.read_feather('./data/nodes.feather').to_crs('EPSG:4326')
-	nodes = nodes.reset_index().rename(columns = {'osmid' : 'knooppunt'})
-	return (gdf, nodes)
+    gdf = gpd.read_feather('./data/gdf.feather')
+    gdf = gdf.reset_index(drop=True)
+    gdf = calculate_new_column(gdf, **DEFAULT_WEIGHTS)
 
-def style_function(feature):
-	cmap = cm.RdYlGn  # Choose a continuous colormap (11 colors)
-	value = feature['properties']['score_totaal']  # Get the value from your column
-	normalized_value = (10*value)+10
-	color = mcolors.rgb2hex(cmap(normalized_value))  # Map the value to a color
-	return {'color': color}
-	
-def style_function_route(feature):
-	return {'weight': 5}
-
-def calculate_new_column(gdf, ovl, bomen, water, monumenten, wegen, parken, toiletten, verkeerslichten, wegdekkwaliteit, horeca, kerk, winkels, groen, kampioen, waarnemingen, ov, schaduw, colum_name = 'Score'): 
-    # Add your calculation logic here, e.g., using min_value and max_value
-	# Score op basis van gewichten ingevuld op streamlit
-	gdf['score_totaal'] = (
-					gdf['score_bomen']*bomen + 
-					gdf['score_ovl']*ovl + 
-					gdf['score_water']*water + 
-					gdf['score_monumenten']*monumenten + 
-					gdf['score_wegen']*wegen + 
-					gdf['score_park']*parken + 
-					#gdf['score_openbare_toiletten']*toiletten + 
-					gdf['score_verkeerslichten']*verkeerslichten + 
-					#gdf['score_wegdekkwaliteit']*wegdekkwaliteit + 
-					gdf['score_horeca']*horeca +
-					#gdf['score_kerk']*kerk +
-					gdf['score_OV']*ov +
-					#gdf['score_buffergebied']*groen +
-					#gdf['score_kampioensbomen']*kampioen +
-					gdf['score_schaduw']*schaduw +
-					gdf['score_winkels']*winkels) 
-	return gdf	
-
-#@st.cache_resource
-def create_map(_gdf, _nodes, _df_route = None, route = False, distance = 0, score = 0, mandatory_nodes = None):
-	m = folium.Map(location=[_gdf['geometry'].centroid.y.mean(), _gdf['geometry'].centroid.x.mean()], zoom_start=14)
-
-	folium.GeoJson(
-		_gdf,
-		name='score_totaal',
-		style_function=style_function).add_to(m)	
-	
-	folium.GeoJson(
-		_nodes,
-		name='Nodes',
-		marker = folium.CircleMarker(radius = 2, # Radius in metres
-                                           weight = 0, #outline weight
-                                           fill_color = '#000000', 
-                                           fill_opacity = 1),
-		tooltip=folium.GeoJsonTooltip(fields=['knooppunt'], labels=True, sticky=True)
-		).add_to(m)	
-	
-	if route: 
-		folium.GeoJson(
-			_df_route, style_function=style_function_route,
-			name='Route').add_to(m)	
-		
-		if mandatory_nodes:
-
-			route_nodes = [_df_route.iloc[0]["u"]]
-
-			for _, row in _df_route.iterrows():
-				route_nodes.append(row["v"])
-
-			mandatory_order = []
-			seen = set()
-
-			for node in route_nodes:
-				if node in mandatory_nodes and node not in seen:
-					mandatory_order.append(node)
-					seen.add(node)
-
-			order_dict = {
-				node: i + 1
-				for i, node in enumerate(mandatory_order)
-			}
-
-			mandatory_gdf = _nodes[
-				_nodes["knooppunt"].isin(mandatory_order)
-			].copy()
-
-			mandatory_gdf["order"] = (
-				mandatory_gdf["knooppunt"]
-				.map(order_dict)
-			)
-
-			for _, row in mandatory_gdf.iterrows():
-
-				folium.Marker(
-					location=[
-						row.geometry.y,
-						row.geometry.x
-					],
-					icon=folium.DivIcon(
-						html=f"""
-						<div style="
-							background-color:red;
-							border-radius:50%;
-							width:24px;
-							height:24px;
-							line-height:24px;
-							text-align:center;
-							color:white;
-							font-weight:bold;
-							font-size:12px;
-							border:2px solid white;
-						">
-							{row['order']}
-						</div>
-						"""
-					)
-				).add_to(m)
+    nodes = gpd.read_feather('./data/nodes.feather').to_crs('EPSG:4326')
+    nodes = nodes.reset_index().rename(columns={'osmid': 'knooppunt'})
+    return (gdf, nodes)
 
 
-		st.markdown('**Er is een route gevonden van '+str(round(distance/1000,2))+ 'km en een gemiddelde score van '+str(round(score,2))
-			  		+ '**' )
-		if score == -10: ###
-			st.markdown("Niet mogelijk om alle waypoints te bezoeken") ###
-    
-	if route and _df_route is not None and len(_df_route) > 0:
+def calculate_new_column(gdf, ovl, bomen, water, monumenten, wegen, parken, toiletten, verkeerslichten, wegdekkwaliteit, horeca, kerk, winkels, groen, kampioen, waarnemingen, ov, schaduw, colum_name='Score'):
+    # Score op basis van gewichten ingevuld op streamlit
+    gdf['score_totaal'] = (
+        gdf['score_bomen'] * bomen +
+        gdf['score_ovl'] * ovl +
+        gdf['score_water'] * water +
+        gdf['score_monumenten'] * monumenten +
+        gdf['score_wegen'] * wegen +
+        gdf['score_park'] * parken +
+        gdf['score_verkeerslichten'] * verkeerslichten +
+        gdf['score_horeca'] * horeca +
+        gdf['score_OV'] * ov +
+        gdf['score_schaduw'] * schaduw +
+        gdf['score_winkels'] * winkels)
+    return gdf
 
-		route_gdf = _df_route[_df_route.geometry.notna()].copy()
 
-		# 🔥 FORCE correct CRS voor route
-		if route_gdf.crs is None:
-			route_gdf = route_gdf.set_crs("EPSG:4326")
+def bezoekvolgorde(_df_route, mandatory_nodes):
+    """In welke volgorde doet de route de verplichte punten aan?"""
+    if not mandatory_nodes or _df_route is None or len(_df_route) == 0:
+        return []
+
+    route_nodes = [_df_route.iloc[0]["u"]]
+    for _, row in _df_route.iterrows():
+        route_nodes.append(row["v"])
+
+    volgorde = []
+    seen = set()
+    for node in route_nodes:
+        if node in mandatory_nodes and node not in seen:
+            volgorde.append(node)
+            seen.add(node)
+    return volgorde
 
 
+def route_layer(_df_route, _nodes, volgorde):
+    """FeatureGroup met de route plus genummerde markers voor de verplichte
+    punten; wordt los van de (statische) basiskaart bijgewerkt via
+    st_folium(feature_group_to_add=...)."""
+    fg = folium.FeatureGroup(name='Route')
 
+    for geom in _df_route.geometry:
+        if geom is None:
+            continue
+        parts = geom.geoms if geom.geom_type == 'MultiLineString' else [geom]
+        for part in parts:
+            folium.PolyLine([(y, x) for x, y in part.coords], color='#3388ff', weight=5).add_to(fg)
 
-	return m
+    order_dict = {node: i + 1 for i, node in enumerate(volgorde)}
+    punten = _nodes[_nodes["knooppunt"].isin(order_dict)]
 
+    for _, row in punten.iterrows():
+        folium.Marker(
+            location=[row.geometry.y, row.geometry.x],
+            icon=folium.DivIcon(html=f"""
+                <div style="
+                    background-color:red;
+                    border-radius:50%;
+                    width:24px;
+                    height:24px;
+                    line-height:24px;
+                    text-align:center;
+                    color:white;
+                    font-weight:bold;
+                    font-size:12px;
+                    border:2px solid white;
+                ">{order_dict[row['knooppunt']]}</div>
+            """)
+        ).add_to(fg)
+
+    return fg
 
 
 def main():
-	# Title and description
-	
-	st.title("Verplichte tussenpunten")
-	st.write("Welkom bij de loopplezierkaart van de Hogeschool van Amsterdam. Kies in het menu links welke omgevingsfactoren je wil laten meewegen in de loopbaarheidsscore. Klik op 'Calculate' en bekijk de kaart (groen is aantrekkelijk, geel is neutraal en rood is minder aantrekkelijk).")
-	st.write("De zwarte punten zijn knooppunten met een id. Als je twee knooppunten kiest en de id's invult in het menu kan je ook de meest aantrekkelijke route bereken tussen de twee punten a.d.v. de eerder gekozen score. Klik op 'Add route' om jouw gepersonaliseerde route te tonen")
-	st.write("Alle verplichte tussenpunten worden gemarkeerd met een nummer, waarbij elk getal staat voor de volgorde van de verplichte tussenpunten. Veel loopplezier!")
-	
-	(gdf, nodes) = load_data()
-	
-	# Sidebar with sliders
-	st.sidebar.header("Map settings")
+    st.title("Verplichte tussenpunten")
+    st.caption("Hogeschool van Amsterdam — Bereken een route die onderweg langs punten komt die jij kiest")
 
-	df_route = None
-	# df_route = []
-	route = False
-	distance = 0
-	score = 0
+    with st.expander("Over deze kaart — wat zie ik hier?"):
+        st.markdown("""
+Deze kaart berekent een route die **onderweg langs punten komt die jij zelf opgeeft** —
+bijvoorbeeld een winkel, een bankje of een plek waar je iemand ophaalt.
 
-	
-	with st.sidebar.form("Score input"):	
-		ovl = st.number_input("Score openbare verlichting", -10,10,0,1,  key="ovl")
-		bomen = st.number_input("Score bomen", -10,10,1,1, key="bomen")
-		water = st.number_input("Score water", -10,10,-1,1, key="water")
-		monumenten = st.number_input("Score monumenten", -10,10,0,1, key="monumenten")
-		wegen = st.number_input("Score drukke wegen", -10,10,0,1, key="wegen")
-		parken = st.number_input("Score parken", -10,10,0,1, key="parken")
-		#toiletten = st.number_input("Score toiletten", -10,10,0,1, key="toiletten")
-		verkeerslichten = st.number_input("Score verkeerslichten", -10,10,-1,1, key="verkeerslichten")
-		#wegdekkwaliteit = st.number_input("Score wegdekkwaliteit", -10,10,0,1, key="wegdekkwaliteit")
-		horeca = st.number_input("Score horeca", -10,10,1,1, key="horeca")
-		#kerk = st.number_input("Score kerken", -10,10,0,1, key="kerk")
-		winkels = st.number_input("Score winkels", -10,10,0,1, key="winkels")
-		groen = st.number_input("Score groen", -10,10,0,1, key="groen")
-		# kampioen = st.number_input("Score kampioensbomen", -10,10,0,1, key="kampioen")
-		schaduw = st.number_input("Score schaduw", -10, 10, 0, 1, key = "schaduw")
-		# waarnemingen = st.number_input("Score waarnemingen", -10,10,2,1, key="waarnemingen")
-		ov = st.number_input("Score OV", -10,10,1,1, key="ov")
-		calculate_button = st.form_submit_button("Calculate")
+**Jouw eigen score**
+In het menu links geef je elke omgevingsfactor een gewicht tussen –10 en +10. Klik op
+**Bereken** om de kaart te kleuren:
+🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
-	with st.sidebar.form("Route"):	
-		start = st.number_input("Start knooppunt", 0,3100,924,1,  key="start")
-		end = st.number_input("Eind knooppunt", 0,3100,1145,1,  key="end")
-		max_dist = st.number_input("Maximale afstand", 500,20000,9000,100,  key="max_dist")
-		mandatory_text = st.text_input("Verplichte tussenpunten (zet na elk tussenpunt een komma-teken)","909, 715")
-		add_route = st.form_submit_button("Add route")
-		mandatory_nodes = []
-		if mandatory_text.strip():
+**Een route berekenen**
+Vul een start- en eindknooppunt in (de zwarte punten op de kaart; beweeg je muis over een
+punt om het nummer te zien). Zet in het veld *Verplichte tussenpunten* de nummers van de
+punten waar je langs wilt, gescheiden door komma's, en klik op **Route toevoegen**.
 
-			mandatory_nodes = [
-				int(x.strip())
-				for x in mandatory_text.split(",")
-			]
-			
-	if calculate_button:
-		gdf = calculate_new_column(gdf, ovl = ovl, bomen = bomen, water = water, monumenten = monumenten, wegen = wegen, parken = parken, toiletten = 0, verkeerslichten = verkeerslichten, wegdekkwaliteit = 0, horeca = horeca, kerk = 0, winkels = winkels ,groen = groen, kampioen = 0, waarnemingen = 0, ov = ov, schaduw = schaduw)
+**De volgorde**
+Je hoeft de volgorde niet zelf te bepalen: het algoritme kiest de handigste
+volgorde binnen de maximale afstand. De rode genummerde bolletjes op de kaart laten zien
+in welke volgorde je de punten aandoet; rechts staat dezelfde volgorde als lijst.
+        """)
 
-	if add_route:
+    (gdf, nodes) = load_data()
 
-		gdf = calculate_new_column(
-			gdf,
-			ovl=ovl, bomen=bomen, water=water, monumenten=monumenten,
-			wegen=wegen, parken=parken, toiletten=0,
-			verkeerslichten=verkeerslichten, wegdekkwaliteit=0,
-			horeca=horeca, kerk=0, winkels=winkels,
-			groen=groen, kampioen=0, waarnemingen=0,
-			ov=ov, schaduw=schaduw
-		)
+    weights, calculate_button = weight_form()
 
-		df_route, distance, score = calculate_mandatory_route(
-			gdf=gdf,
-			start=start,
-			end=end,
-			mandatory_nodes=mandatory_nodes,
-			max_dist=max_dist
-		)
-		df_route = gpd.GeoDataFrame(
-			df_route,
-			geometry="geometry",
-			crs=gdf.crs
-		)
-		if df_route is None:
+    st.sidebar.divider()
+    st.sidebar.subheader("Route berekenen")
 
-				st.error(
-					"Geen route gevonden die alle verplichte punten bezoekt"
-				)
-		route = True
-	st_folium(create_map(gdf, nodes, df_route, route, distance, score, mandatory_nodes = mandatory_nodes), width=1000, height=700, returned_objects=[])
-	route = False
-	
+    with st.sidebar.form("Route"):
+        c1, c2 = st.columns(2)
+        start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
+        end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
+        max_dist = st.number_input("Max. afstand (m)", 500, 20000, 9000, 100, key="max_dist")
+        mandatory_text = st.text_input("Verplichte tussenpunten (gescheiden door komma's)", "909, 715")
+        add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
+
+    mandatory_nodes = []
+    if mandatory_text.strip():
+        try:
+            mandatory_nodes = [int(x.strip()) for x in mandatory_text.split(",") if x.strip()]
+        except ValueError:
+            st.sidebar.error("Gebruik alleen knooppuntnummers, gescheiden door komma's.")
+
+    ss = st.session_state
+    STATE_KEYS = ("tp_route", "tp_distance", "tp_score", "tp_volgorde", "tp_weights")
+
+    # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
+    if calculate_button:
+        for k in STATE_KEYS:
+            ss.pop(k, None)
+
+    # 'Route toevoegen' = nieuwe route berekenen en bewaren in session_state
+    if add_route:
+        gdf = calculate_new_column(gdf, **weights)
+
+        df_route, distance, score = _cached_mandatory_route(
+            gdf, start=start, end=end, mandatory=tuple(mandatory_nodes),
+            max_dist=max_dist, wkey=weights_key(weights),
+        )
+
+        if df_route is None or len(df_route) == 0:
+            st.error("Geen route gevonden die alle verplichte punten bezoekt")
+            for k in STATE_KEYS:
+                ss.pop(k, None)
+        else:
+            df_route = gpd.GeoDataFrame(df_route, geometry="geometry", crs=gdf.crs)
+            ss["tp_route"] = df_route
+            ss["tp_distance"] = distance
+            ss["tp_score"] = score
+            ss["tp_volgorde"] = bezoekvolgorde(df_route, mandatory_nodes)
+            ss["tp_weights"] = weights
+
+    # ---- Render op basis van de route in session_state ----
+    df_route = ss.get("tp_route")
+    route = df_route is not None
+    distance = ss.get("tp_distance", 0)
+    score = ss.get("tp_score", 0)
+    volgorde = ss.get("tp_volgorde", [])
+
+    if route:
+        current_weights = ss["tp_weights"]
+    elif calculate_button:
+        current_weights = weights
+    else:
+        current_weights = DEFAULT_WEIGHTS
+
+    gdf = calculate_new_column(gdf, **current_weights)
+
+    col_map, col_side = st.columns([3, 2], gap="medium")
+
+    with col_map:
+        # Lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
+        # laag niet weg als je None doorgeeft, waardoor een gewiste route
+        # zichtbaar bleef.
+        st_folium(
+            base_map(gdf, nodes, current_weights),
+            feature_group_to_add=route_layer(df_route, nodes, volgorde) if route else folium.FeatureGroup(name="Route"),
+            width=700, height=620, returned_objects=[], key="tussenpunten_map",
+        )
+
+    with col_side:
+        if route:
+            m1, m2 = st.columns(2)
+            m1.metric("Afstand", f"{distance / 1000:.2f} km")
+            m2.metric("Score", f"{score:.2f}")
+            if score == -10:
+                st.warning("Niet mogelijk om alle waypoints te bezoeken")
+
+            if volgorde:
+                st.markdown("**Volgorde van de tussenpunten**")
+                st.markdown("\n".join(f"{i}. knooppunt **{n}**" for i, n in enumerate(volgorde, 1)))
+                st.caption("Dezelfde nummers staan als rode bolletjes op de kaart.")
+        else:
+            st.markdown("### Zo begin je")
+            st.markdown("""
+**1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
+
+**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+
+**3.** Vul beide nummers links in, zet de knooppunten waar je langs wilt in het
+veld *Verplichte tussenpunten*, en klik **Route toevoegen**.
+            """)
+            st.info(
+                "De route komt langs alle punten die je opgeeft. Het algoritme kiest zelf "
+                "de handigste volgorde; die zie je daarna hier terug.",
+                icon="📍",
+            )
+
+
 # Run the app
 if __name__ == '__main__':
-	main()
+    main()

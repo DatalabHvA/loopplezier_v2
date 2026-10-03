@@ -555,9 +555,9 @@ def plot_pareto(df, selected_gap=None, selected_score=None, selected_distance=No
         customdata=df["afstand"],
 
         hovertemplate=
-            "Max gap: %{x:.2f} m<br>" +
+            "Langste stuk zonder bankje: %{x:.0f} m<br>" +
             "Score: %{y:.2f}<br>" +
-            "Afstand: %{customdata:.2f} m" +
+            "Afstand: %{customdata:.0f} m" +
             "<extra></extra>"
     ))
 
@@ -571,18 +571,24 @@ def plot_pareto(df, selected_gap=None, selected_score=None, selected_distance=No
             marker=dict(size=10, color="red"),
 
             hovertemplate=
-                "Max gap: %{x:.2f} m<br>" +
+                "Langste stuk zonder bankje: %{x:.0f} m<br>" +
                 "Score: %{y:.2f}<br>" +
-                (f"Afstand: {selected_distance:.2f} m<br>" if selected_distance is not None else "") +
+                (f"Afstand: {selected_distance:.0f} m<br>" if selected_distance is not None else "") +
                 "<extra></extra>"
         ))
 
     fig.update_layout(
-        title="Alle mogelijke routes met bijbehorende omgevingsscores en maximale gap",
         xaxis_title="Maximale afstand tussen bankjes (m)",
         yaxis_title="Gemiddelde omgevingsscore",
         template="plotly_white",
-        hovermode="closest"
+        hovermode="closest",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=360,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
+        ),
     )
 
     return fig

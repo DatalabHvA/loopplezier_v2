@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from shapely.ops import linemerge
 from pareto_select import clicked_point_index
-from map_utils import base_map, DEFAULT_WEIGHTS, weights_key
+from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
 st.set_page_config(layout='wide')
 
 
@@ -24,7 +24,7 @@ def _cached_pareto_2d(_gdf, start, end, L_min, L_max, wkey):
 def load_data():
     gdf = gpd.read_feather('./data/gdf.feather')
     gdf = gdf.reset_index(drop=True)
-    gdf = calculate_new_column(gdf, ovl=0, bomen=1, water=-1, monumenten=0, wegen=0, parken=0, toiletten=0, verkeerslichten=-1, wegdekkwaliteit=0, horeca=1, kerk=0, winkels=0, groen=0, kampioen=0, waarnemingen=0, ov=1, schaduw=0)
+    gdf = calculate_new_column(gdf, **DEFAULT_WEIGHTS)
 
     nodes = gpd.read_feather('./data/nodes.feather').to_crs('EPSG:4326')
     nodes = nodes.reset_index().rename(columns={'osmid': 'knooppunt'})
@@ -85,14 +85,14 @@ horeca, verkeerslichten, drukke wegen, enzovoort.
 
 **Jouw eigen score**
 In het menu links geef je elke factor een gewicht tussen –10 en +10. Een positief gewicht
-maakt een straat aantrekkelijker, een negatief gewicht juist minder. Klik op **Calculate**
+maakt een straat aantrekkelijker, een negatief gewicht juist minder. Klik op **Bereken**
 om de kaart opnieuw te kleuren:
 🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
 **Een route berekenen**
 De zwarte punten op de kaart zijn knooppunten, elk met een eigen nummer — beweeg je muis
 over een punt om het nummer te zien. Vul een start- en eindknooppunt in, kies een minimale
-en maximale afstand, en klik op **Add route**.
+en maximale afstand, en klik op **Route toevoegen**.
 
 **Het Pareto-front**
 Er is zelden één "beste" route: een route met een hogere score is vaak ook langer. Het
@@ -103,60 +103,30 @@ deze alternatieven; klik op een punt om die route op de kaart te tonen.
 
 (gdf, nodes) = load_data()
 
-# Sidebar
-st.sidebar.header("Omgevingsfactoren")
-st.sidebar.caption("Geef elke factor een gewicht van –10 tot +10.")
-
-with st.sidebar.form("Score input"):
-    with st.expander("Groen & natuur"):
-        bomen = st.number_input("Bomen", -10, 10, 1, 1, key="bomen")
-        parken = st.number_input("Parken", -10, 10, 0, 1, key="parken")
-        groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
-        water = st.number_input("Water", -10, 10, -1, 1, key="water")
-        schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
-
-    with st.expander("Voorzieningen"):
-        horeca = st.number_input("Horeca", -10, 10, 1, 1, key="horeca")
-        winkels = st.number_input("Winkels", -10, 10, 0, 1, key="winkels")
-        ov = st.number_input("Openbaar vervoer", -10, 10, 1, 1, key="ov")
-        monumenten = st.number_input("Monumenten", -10, 10, 0, 1, key="monumenten")
-
-    with st.expander("Veiligheid & comfort"):
-        ovl = st.number_input("Openbare verlichting", -10, 10, 0, 1, key="ovl")
-        verkeerslichten = st.number_input("Verkeerslichten", -10, 10, -1, 1, key="verkeerslichten")
-        wegen = st.number_input("Drukke wegen", -10, 10, 0, 1, key="wegen")
-
-    calculate_button = st.form_submit_button("Calculate", use_container_width=True)
+weights, calculate_button = weight_form()
 
 st.sidebar.divider()
 st.sidebar.subheader("Route berekenen")
 
 with st.sidebar.form("Route"):
     c1, c2 = st.columns(2)
-    start = c1.number_input("Start", 0, 3100, 924, 1, key="start")
-    end = c2.number_input("Eind", 0, 3100, 1145, 1, key="end")
+    start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
+    end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
     c3, c4 = st.columns(2)
     min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
     max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
-    add_route = st.form_submit_button("Add route", use_container_width=True)
-
-weights = dict(
-    ovl=ovl, bomen=bomen, water=water, monumenten=monumenten,
-    wegen=wegen, parken=parken, toiletten=0, verkeerslichten=verkeerslichten,
-    wegdekkwaliteit=0, horeca=horeca, kerk=0, winkels=winkels,
-    groen=groen, kampioen=0, waarnemingen=0, ov=ov, schaduw=schaduw,
-)
+    add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
 
 ss = st.session_state
 STATE_KEYS = ("home_df", "home_weights", "home_pos", "home_cid")
 
-# 'Calculate' = alleen de kaart herkleuren; verwijder een eventuele actieve route
+# 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
 if calculate_button:
     gdf = calculate_new_column(gdf, **weights)
     for k in STATE_KEYS:
         ss.pop(k, None)
 
-# 'Add route' = nieuwe Pareto-set berekenen en bewaren in session_state
+# 'Route toevoegen' = nieuwe Pareto-set berekenen en bewaren in session_state
 if add_route:
     gdf = calculate_new_column(gdf, **weights)
     pareto = _cached_pareto_2d(
@@ -243,11 +213,11 @@ with col_side:
     else:
         st.markdown("### Zo begin je")
         st.markdown("""
-**1.** Stel links de gewichten in en klik **Calculate** — de kaart kleurt mee.
+**1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
 
 **2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
 
-**3.** Vul beide nummers links in en klik **Add route**.
+**3.** Vul beide nummers links in en klik **Route toevoegen**.
         """)
         st.info(
             "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "

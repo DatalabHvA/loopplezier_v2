@@ -512,11 +512,17 @@ def plot_pareto(df, selected_shadow=None, selected_score=None, selected_distance
         ))
 
     fig.update_layout(
-        title="Alternatieve routes met schaduw vs omgevingsscore",
         xaxis_title="Schaduwbedekking (%)",
         yaxis_title="Gemiddelde omgevingsscore",
         template="plotly_white",
-        hovermode="closest"
+        hovermode="closest",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=360,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
+        ),
     )
 
     return fig

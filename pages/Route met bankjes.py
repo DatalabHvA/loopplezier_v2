@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from shapely.ops import linemerge
 from pareto_select import clicked_point_index
-from map_utils import base_map, DEFAULT_WEIGHTS, weights_key
+from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
 st.set_page_config(layout='wide')
 
 
@@ -38,7 +38,7 @@ def _bankjes_voor_route(route_tuple, _gdf):
 def load_data():
     gdf = gpd.read_feather('./data/gdf.feather')
     gdf = gdf.reset_index(drop=True)
-    gdf = calculate_new_column(gdf, ovl=0, bomen=1, water=-1, monumenten=0, wegen=0, parken=0, toiletten=0, verkeerslichten=-1, wegdekkwaliteit=0, horeca=1, kerk=0, winkels=0, groen=0, kampioen=0, waarnemingen=0, ov=1, schaduw=0)
+    gdf = calculate_new_column(gdf, **DEFAULT_WEIGHTS)
 
     nodes = gpd.read_feather('./data/nodes.feather').to_crs('EPSG:4326')
     nodes = nodes.reset_index().rename(columns={'osmid': 'knooppunt'})
@@ -105,56 +105,60 @@ def route_layer(_df_route, bankjes_gdf):
 def main():
     # Title and description
 
-    st.title("Loopplezierkaart")
-    st.write("Welkom bij de loopplezierkaart van de Hogeschool van Amsterdam. Kies in het menu links welke omgevingsfactoren je wil laten meewegen in de loopbaarheidsscore. Klik op 'Calculate' en bekijk de kaart (groen is aantrekkelijk, geel is neutraal en rood is minder aantrekkelijk).")
-    st.write("Je kan waarnemingen van dieren en planten op de kaart tonen door het vinkje aan te zetten. Bekijk zo wat je onderweg allemaal tegenkomt.")
-    st.write("De zwarte punten zijn knooppunten met een id. Als je twee knooppunten kiest en de id's invult in het menu kan je ook de meest aantrekkelijke route bereken tussen de twee punten a.d.v. de eerder gekozen score. Klik op 'Add route' om jouw gepersonaliseerde route te tonen")
+    st.title("Route met bankjes")
+    st.caption("Hogeschool van Amsterdam — Vind een route waarop je onderweg regelmatig kunt zitten")
+
+    with st.expander("Over deze kaart — wat zie ik hier?"):
+        st.markdown("""
+Deze kaart zoekt wandelroutes waarop je **onderweg regelmatig een bankje** tegenkomt —
+handig als je liever niet lang achter elkaar loopt.
+
+**Jouw eigen score**
+In het menu links geef je elke omgevingsfactor een gewicht tussen –10 en +10. Klik op
+**Bereken** om de kaart te kleuren:
+🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
+
+**Een route berekenen**
+Vul een start- en eindknooppunt in (de zwarte punten op de kaart; beweeg je muis over een
+punt om het nummer te zien) en klik op **Route toevoegen**. De gevonden bankjes langs de route
+worden als icoon op de kaart gezet.
+
+**Het langste stuk zonder bankje, en het Pareto-front**
+Het *langste stuk* is de grootste afstand die je op de route aflegt zonder een bankje
+tegen te komen. Een route met veel bankjes
+heeft vaak een lagere omgevingsscore — er is dus geen enkele beste route. Het algoritme
+zoekt alle routes die je niet kunt verbeteren zonder op de andere as in te leveren: het
+*Pareto-front*. De grafiek rechts toont die alternatieven; klik op een punt om die route
+op de kaart te zien.
+        """)
 
     (gdf, nodes) = load_data()
 
-    # Sidebar with sliders
-    st.sidebar.header("Map settings")
+    weights, calculate_button = weight_form()
 
-    with st.sidebar.form("Score input"):
-        ovl = st.number_input("Score openbare verlichting", -10, 10, 0, 1, key="ovl")
-        bomen = st.number_input("Score bomen", -10, 10, 1, 1, key="bomen")
-        water = st.number_input("Score water", -10, 10, -1, 1, key="water")
-        monumenten = st.number_input("Score monumenten", -10, 10, 0, 1, key="monumenten")
-        wegen = st.number_input("Score drukke wegen", -10, 10, 0, 1, key="wegen")
-        parken = st.number_input("Score parken", -10, 10, 0, 1, key="parken")
-        verkeerslichten = st.number_input("Score verkeerslichten", -10, 10, -1, 1, key="verkeerslichten")
-        horeca = st.number_input("Score horeca", -10, 10, 1, 1, key="horeca")
-        winkels = st.number_input("Score winkels", -10, 10, 0, 1, key="winkels")
-        groen = st.number_input("Score groen", -10, 10, 0, 1, key="groen")
-        schaduw = st.number_input("Score schaduw", -10, 10, 0, 1, key="schaduw")
-        ov = st.number_input("Score OV", -10, 10, 1, 1, key="ov")
-        calculate_button = st.form_submit_button("Calculate")
+    st.sidebar.divider()
+    st.sidebar.subheader("Route berekenen")
 
     with st.sidebar.form("Route"):
-        start = st.number_input("Start knooppunt", 0, 3100, 924, 1, key="start")
-        end = st.number_input("Eind knooppunt", 0, 3100, 1145, 1, key="end")
-        min_dist = st.number_input("Minimale afstand", 500, 10000, 500, 100, key="min_dist")
-        max_dist = st.number_input("Maximale afstand", 500, 10000, 3000, 100, key="max_dist")
-        max_bankjes_afstand = st.number_input("Max afstand tussen bankje", 100, 2000, 500, 50)
-        add_route = st.form_submit_button("Add route")
-
-    weights = dict(
-        ovl=ovl, bomen=bomen, water=water, monumenten=monumenten,
-        wegen=wegen, parken=parken, toiletten=0, verkeerslichten=verkeerslichten,
-        wegdekkwaliteit=0, horeca=horeca, kerk=0, winkels=winkels,
-        groen=groen, kampioen=0, waarnemingen=0, ov=ov, schaduw=schaduw,
-    )
+        c1, c2 = st.columns(2)
+        start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
+        end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
+        c3, c4 = st.columns(2)
+        min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
+        max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
+        max_bankjes_afstand = st.number_input("Max. afstand tussen bankjes (m)", 100, 2000, 500, 50)
+        add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
 
     ss = st.session_state
     STATE_KEYS = ("bankjes_df", "bankjes_weights", "bankjes_pos", "bankjes_cid")
 
-    # 'Calculate' = alleen de kaart herkleuren; verwijder een eventuele actieve route
+    # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
     if calculate_button:
         gdf = calculate_new_column(gdf, **weights)
         for k in STATE_KEYS:
             ss.pop(k, None)
 
-    # 'Add route' = nieuwe Pareto-set berekenen en bewaren in session_state
+    # 'Route toevoegen' = nieuwe Pareto-set berekenen en bewaren in session_state
     if add_route:
         gdf = calculate_new_column(gdf, **weights)
 
@@ -211,36 +215,64 @@ def main():
         current_weights = DEFAULT_WEIGHTS
 
     gdf = calculate_new_column(gdf, **current_weights)
-    st_folium(
-        base_map(gdf, nodes, current_weights),
-        feature_group_to_add=route_layer(df_route, bankjes_gdf) if route else None,
-        width=1000, height=700, returned_objects=[], key="bankjes_map",
-    )
-    if route:
-        st.markdown('**Er is een route gevonden van ' + str(round(distance / 1000, 2)) + 'km met een max gap van ' + str(round(max_gap, 0)) + 'm en een gemiddelde score van ' + str(round(score, 2)) + '**')
-        if score == -10:
-            st.markdown("Niet mogelijk om alle waypoints te bezoeken")
 
-    if pareto_df is not None and len(pareto_df) > 0:
-        fig = plot_pareto(
-            pareto_df,
-            selected_gap=max_gap if route else None,
-            selected_score=score if route else None,
-            selected_distance=distance if route else None,
-        )
-        event = st.plotly_chart(
-            fig,
-            use_container_width=True,
-            key=f"bankjes_pareto_{ss.get('bankjes_cid', 0)}",
-            on_select="rerun",
-            selection_mode="points",
-        )
-        st.caption("Klik op een punt in de grafiek om die alternatieve route (bv. kleinere afstand tussen bankjes met een lagere score, maar op de Pareto-front) op de kaart te zien.")
+    col_map, col_side = st.columns([3, 2], gap="medium")
 
-        clicked = clicked_point_index(event, len(pareto_df))
-        if clicked is not None and clicked != ss.get("bankjes_pos"):
-            ss["bankjes_pos"] = clicked
-            st.rerun()
+    with col_map:
+        # Lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
+        # laag niet weg als je None doorgeeft, waardoor een gewiste route
+        # zichtbaar bleef.
+        st_folium(
+            base_map(gdf, nodes, current_weights),
+            feature_group_to_add=route_layer(df_route, bankjes_gdf) if route else folium.FeatureGroup(name="Route"),
+            width=700, height=620, returned_objects=[], key="bankjes_map",
+        )
+
+    with col_side:
+        if pareto_df is not None and len(pareto_df) > 0:
+            if route:
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Afstand (km)", f"{distance / 1000:.2f}")
+                m2.metric("Score", f"{score:.2f}")
+                m3.metric("Langste stuk (m)", f"{max_gap:.0f}")
+                if score == -10:
+                    st.warning("Niet mogelijk om alle waypoints te bezoeken")
+
+            st.markdown("**Alternatieve routes op het Pareto-front**")
+            st.caption("Klik op een punt om die route op de kaart te zien.")
+            fig = plot_pareto(
+                pareto_df,
+                selected_gap=max_gap if route else None,
+                selected_score=score if route else None,
+                selected_distance=distance if route else None,
+            )
+            event = st.plotly_chart(
+                fig,
+                use_container_width=True,
+                key=f"bankjes_pareto_{ss.get('bankjes_cid', 0)}",
+                on_select="rerun",
+                selection_mode="points",
+            )
+
+            clicked = clicked_point_index(event, len(pareto_df))
+            if clicked is not None and clicked != ss.get("bankjes_pos"):
+                ss["bankjes_pos"] = clicked
+                st.rerun()
+        else:
+            st.markdown("### Zo begin je")
+            st.markdown("""
+**1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
+
+**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+
+**3.** Vul beide nummers links in, kies hoe ver je maximaal tussen twee bankjes
+wilt lopen, en klik **Route toevoegen**.
+            """)
+            st.info(
+                "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "
+                "Klik op een punt om die route op de kaart te bekijken.",
+                icon="📊",
+            )
 
 
 # Run the app

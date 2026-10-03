@@ -20,15 +20,55 @@ N_BUCKETS = 11
 # Standaardgewichten zoals in load_data() van elke pagina (voor de kleuring
 # voordat de gebruiker iets berekent).
 DEFAULT_WEIGHTS = dict(
-    ovl=0, bomen=1, water=-1, monumenten=0, wegen=0, parken=0, toiletten=0,
-    verkeerslichten=-1, wegdekkwaliteit=0, horeca=1, kerk=0, winkels=0,
-    groen=0, kampioen=0, waarnemingen=0, ov=1, schaduw=0,
+    ovl=0, bomen=0, water=1, monumenten=0, wegen=-1, parken=1, toiletten=0,
+    verkeerslichten=0, wegdekkwaliteit=0, horeca=0, kerk=0, winkels=0,
+    groen=0, kampioen=0, waarnemingen=0, ov=0, schaduw=0,
 )
 
 
 def weights_key(weights):
     """Hashbare sleutel voor de cache (volgorde-onafhankelijk)."""
     return tuple(sorted((k, float(v)) for k, v in weights.items()))
+
+
+def weight_form(form_key="Score input"):
+    """Gewicht-inputs in de sidebar, gegroepeerd in drie inklapbare secties.
+
+    Geeft ``(weights, calculate_button)`` terug. Door de twaalf factoren in te
+    klappen past de hele sidebar -- inclusief het routeformulier eronder -- op
+    één scherm, zodat 'Route toevoegen' zonder scrollen bereikbaar is.
+    """
+    st.sidebar.header("Omgevingsfactoren")
+    st.sidebar.caption("Geef elke factor een gewicht van –10 tot +10.")
+
+    with st.sidebar.form(form_key):
+        with st.expander("Groen & natuur"):
+            bomen = st.number_input("Bomen", -10, 10, 0, 1, key="bomen")
+            parken = st.number_input("Parken", -10, 10, 1, 1, key="parken")
+            groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
+            water = st.number_input("Water", -10, 10, 1, 1, key="water")
+            schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
+
+        with st.expander("Voorzieningen"):
+            horeca = st.number_input("Horeca", -10, 10, 0, 1, key="horeca")
+            winkels = st.number_input("Winkels", -10, 10, 0, 1, key="winkels")
+            ov = st.number_input("Openbaar vervoer", -10, 10, 0, 1, key="ov")
+            monumenten = st.number_input("Monumenten", -10, 10, 0, 1, key="monumenten")
+
+        with st.expander("Veiligheid & comfort"):
+            ovl = st.number_input("Openbare verlichting", -10, 10, 0, 1, key="ovl")
+            verkeerslichten = st.number_input("Verkeerslichten", -10, 10, 0, 1, key="verkeerslichten")
+            wegen = st.number_input("Drukke wegen", -10, 10, -1, 1, key="wegen")
+
+        calculate_button = st.form_submit_button("Bereken", use_container_width=True)
+
+    weights = dict(
+        ovl=ovl, bomen=bomen, water=water, monumenten=monumenten,
+        wegen=wegen, parken=parken, toiletten=0, verkeerslichten=verkeerslichten,
+        wegdekkwaliteit=0, horeca=horeca, kerk=0, winkels=winkels,
+        groen=groen, kampioen=0, waarnemingen=0, ov=ov, schaduw=schaduw,
+    )
+    return weights, calculate_button
 
 
 def _bucketed_geojson(_gdf):

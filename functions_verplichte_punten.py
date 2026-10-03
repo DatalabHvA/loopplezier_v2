@@ -67,58 +67,42 @@ def build_df_route_from_grasp(gdf, best_route):
     return df_route
 def build_graph(a, s):
 
-    G = nx.Graph()
-
-    n = a.shape[0]
-
     eps = 1e-6
 
-    # verzamel quality values
-    qualities = []
+    # Bovendriehoek in één gevectoriseerde pass. De vorige versie liep met een
+    # dubbele Python-loop twee keer over alle n**2 paren (bij 3106 knooppunten
+    # ~4,8 miljoen iteraties per pass); dat was veruit de duurste stap van deze
+    # pagina. Alleen de echte edges worden nu nog in Python doorlopen.
+    mask = np.triu(np.isfinite(a) & (a < 100000), k=1)
+    i_idx, j_idx = np.nonzero(mask)
 
-    for i in range(n):
-        for j in range(i + 1, n):
+    length = a[i_idx, j_idx]
+    score = s[i_idx, j_idx]
 
-            if np.isfinite(a[i, j]) and a[i, j] < 100000:
+    quality = score / (length + eps)
+    q_min = quality.min()
+    q_max = quality.max()
 
-                length = a[i, j]
+    # schaal naar [0,1]; hoge quality => lage cost, altijd positief
+    quality_norm = (quality - q_min) / (q_max - q_min + eps)
+    cost = length * ((1 + 1e-6) - quality_norm)
 
-                quality = s[i, j] / (length + eps)
-
-                qualities.append(quality)
-
-    # normalisatie
-    q_min = min(qualities)
-    q_max = max(qualities)
-
-    for i in range(n):
-        for j in range(i + 1, n):
-
-            if np.isfinite(a[i, j]) and a[i, j] < 100000:
-
-                length = a[i, j]
-
-                quality = s[i, j] / (length + eps)
-
-                # schaal naar [0,1]
-                quality_norm = (
-                    (quality - q_min)
-                    / (q_max - q_min + eps)
-                )
-
-                # altijd positief
-                # hoge quality => lage cost
-                cost = length * ((1+1e-6) - quality_norm)
-
-                G.add_edge(
-                    i,
-                    j,
-                    length=length,
-                    score=s[i, j],
-                    quality=quality,
-                    quality_norm=quality_norm,
-                    cost=cost
-                )
+    G = nx.Graph()
+    G.add_edges_from(
+        (
+            int(i), int(j),
+            {
+                "length": float(ln),
+                "score": float(sc),
+                "quality": float(q),
+                "quality_norm": float(qn),
+                "cost": float(c),
+            },
+        )
+        for i, j, ln, sc, q, qn, c in zip(
+            i_idx, j_idx, length, score, quality, quality_norm, cost
+        )
+    )
 
     return G
 def shortest_path_info(G, i, j, visited):
@@ -274,8 +258,11 @@ def run_grasp(
     mandatory,
     g_max,
     n_iter=100,
-    alpha=0.5
+    alpha=0.5,
+    t_deadline=None,
 ):
+
+    import time as _time
 
     G = build_graph(a, s)
 
@@ -283,7 +270,13 @@ def run_grasp(
 
     best_value = -np.inf
 
-    for _ in range(n_iter):
+    for i in range(n_iter):
+
+        # Tijdslimiet: elke iteratie levert een losse kandidaat op en we houden
+        # de beste bij, dus vroeg stoppen geeft gewoon de beste route tot nu toe.
+        # De check staat na de eerste ronde zodat er altijd één poging is.
+        if i > 0 and t_deadline is not None and _time.perf_counter() > t_deadline:
+            break
 
         result = grasp_route(
             G,
@@ -315,8 +308,12 @@ def calculate_mandatory_route(
     start,
     end,
     mandatory_nodes,
-    max_dist
+    max_dist,
+    t_budget=20.0,
 ):
+
+    import time as _time
+    t_deadline = _time.perf_counter() + t_budget
 
     a_final, s_final, start_final, end_final, indices = preprocess(
         gdf,
@@ -339,7 +336,8 @@ def calculate_mandatory_route(
         mandatory=mandatory_local,
         g_max=max_dist,
         n_iter=50,
-        alpha=0.5
+        alpha=0.5,
+        t_deadline=t_deadline,
     )
 
     if best_route is None:
