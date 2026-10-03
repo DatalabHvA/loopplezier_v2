@@ -20,7 +20,7 @@ N_BUCKETS = 11
 # Standaardgewichten zoals in load_data() van elke pagina (voor de kleuring
 # voordat de gebruiker iets berekent).
 DEFAULT_WEIGHTS = dict(
-    ovl=0, bomen=0, water=1, monumenten=0, wegen=-1, parken=1, toiletten=0,
+    ovl=0, bomen=0, water=1, monumenten=0, wegen=-1, parken=3, toiletten=0,
     verkeerslichten=0, wegdekkwaliteit=0, horeca=0, kerk=0, winkels=0,
     groen=0, kampioen=0, waarnemingen=0, ov=0, schaduw=0,
 )
@@ -44,7 +44,7 @@ def weight_form(form_key="Score input"):
     with st.sidebar.form(form_key):
         with st.expander("Groen & natuur"):
             bomen = st.number_input("Bomen", -10, 10, 0, 1, key="bomen")
-            parken = st.number_input("Parken", -10, 10, 1, 1, key="parken")
+            parken = st.number_input("Parken", -10, 10, 3, 1, key="parken")
             groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
             water = st.number_input("Water", -10, 10, 1, 1, key="water")
             schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
