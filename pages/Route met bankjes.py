@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 from shapely.ops import linemerge
 from pareto_select import clicked_point_index
 from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
+from map_picker import picked_points, route_bar, tap_map, touch_style
 st.set_page_config(layout='wide')
+touch_style()
 
 
 @st.cache_data(show_spinner="Routes berekenen...")
@@ -97,7 +99,8 @@ def route_layer(_df_route, bankjes_gdf):
     for point in bankjes_gdf.geometry:
         folium.Marker(
             [point.y, point.x],
-            icon=folium.features.CustomIcon('./bankje.png', icon_size=(30, 30))
+            icon=folium.features.CustomIcon('./bankje.png', icon_size=(30, 30)),
+            interactive=False,  # een tik op een bankje valt door naar de kaart
         ).add_to(fg)
     return fg
 
@@ -119,9 +122,8 @@ In het menu links geef je elke omgevingsfactor een gewicht tussen –10 en +10. 
 🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
 **Een route berekenen**
-Vul een start- en eindknooppunt in (de zwarte punten op de kaart; beweeg je muis over een
-punt om het nummer te zien) en klik op **Route toevoegen**. De gevonden bankjes langs de route
-worden als icoon op de kaart gezet.
+Tik of klik op de kaart op je startpunt en daarna op je eindpunt, en tik op **Route toevoegen**.
+De gevonden bankjes langs de route worden als icoon op de kaart gezet.
 
 **Het langste stuk zonder bankje, en het Pareto-front**
 Het *langste stuk* is de grootste afstand die je op de route aflegt zonder een bankje
@@ -137,20 +139,16 @@ op de kaart te zien.
     weights, calculate_button = weight_form()
 
     st.sidebar.divider()
-    st.sidebar.subheader("Route berekenen")
+    st.sidebar.subheader("Route-instellingen")
 
-    with st.sidebar.form("Route"):
-        c1, c2 = st.columns(2)
-        start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
-        end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
-        c3, c4 = st.columns(2)
-        min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
-        max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
-        max_bankjes_afstand = st.number_input("Max. afstand tussen bankjes (m)", 100, 2000, 500, 50)
-        add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
+    min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
+    max_bankjes_afstand = st.sidebar.slider("Max. afstand tussen bankjes (m)", 100, 2000, 500, 50)
 
     ss = st.session_state
     STATE_KEYS = ("bankjes_df", "bankjes_weights", "bankjes_pos", "bankjes_cid")
+
+    add_route = route_bar(clear_keys=STATE_KEYS)
+    start, end, _ = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
     if calculate_button:
@@ -170,7 +168,7 @@ op de kaart te zien.
         pareto_df = pareto_to_df(pareto)
 
         if pareto_df is None or len(pareto_df) == 0:
-            st.error("Geen haalbare route gevonden binnen constraints")
+            st.error("Geen routes gevonden. Vergroot de maximale afstand of kies punten dichter bij elkaar.")
             for k in STATE_KEYS:
                 ss.pop(k, None)
         else:
@@ -219,13 +217,13 @@ op de kaart te zien.
     col_map, col_side = st.columns([3, 2], gap="medium")
 
     with col_map:
-        # Lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
-        # laag niet weg als je None doorgeeft, waardoor een gewiste route
-        # zichtbaar bleef.
-        st_folium(
-            base_map(gdf, nodes, current_weights),
-            feature_group_to_add=route_layer(df_route, bankjes_gdf) if route else folium.FeatureGroup(name="Route"),
-            width=700, height=620, returned_objects=[], key="bankjes_map",
+        # Altijd een FeatureGroup i.p.v. None: st_folium haalt een eerder
+        # toegevoegde laag niet weg als je None doorgeeft, waardoor een gewiste
+        # route zichtbaar bleef.
+        tap_map(
+            base_map(gdf, current_weights),
+            route_layer(df_route, bankjes_gdf) if route else folium.FeatureGroup(name="Route"),
+            nodes, key="bankjes_map",
         )
 
     with col_side:
@@ -263,10 +261,10 @@ op de kaart te zien.
             st.markdown("""
 **1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
 
-**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+**2.** Tik op de kaart op je startpunt en daarna op je eindpunt.
 
-**3.** Vul beide nummers links in, kies hoe ver je maximaal tussen twee bankjes
-wilt lopen, en klik **Route toevoegen**.
+**3.** Kies links hoe ver je maximaal tussen twee bankjes wilt lopen, en tik op
+**Route toevoegen**.
             """)
             st.info(
                 "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "

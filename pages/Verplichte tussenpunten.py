@@ -6,8 +6,10 @@ import folium
 from functions_verplichte_punten import *
 import numpy as np
 from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
+from map_picker import picked_points, route_bar, tap_map, touch_style
 
 st.set_page_config(layout='wide')
+touch_style()
 
 
 @st.cache_data(show_spinner="Route berekenen...")
@@ -104,7 +106,8 @@ def route_layer(_df_route, _nodes, volgorde):
                     font-size:12px;
                     border:2px solid white;
                 ">{order_dict[row['knooppunt']]}</div>
-            """)
+            """),
+            interactive=False,  # een tik op een bolletje valt door naar de kaart
         ).add_to(fg)
 
     return fg
@@ -125,9 +128,9 @@ In het menu links geef je elke omgevingsfactor een gewicht tussen –10 en +10. 
 🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
 **Een route berekenen**
-Vul een start- en eindknooppunt in (de zwarte punten op de kaart; beweeg je muis over een
-punt om het nummer te zien). Zet in het veld *Verplichte tussenpunten* de nummers van de
-punten waar je langs wilt, gescheiden door komma's, en klik op **Route toevoegen**.
+Tik of klik op de kaart op je startpunt en daarna op je eindpunt. Tik vervolgens op de
+punten waar je langs wilt; nog een keer tikken haalt een punt weg. Tik dan op
+**Route toevoegen**.
 
 **De volgorde**
 Je hoeft de volgorde niet zelf te bepalen: het algoritme kiest de handigste
@@ -140,25 +143,15 @@ in welke volgorde je de punten aandoet; rechts staat dezelfde volgorde als lijst
     weights, calculate_button = weight_form()
 
     st.sidebar.divider()
-    st.sidebar.subheader("Route berekenen")
+    st.sidebar.subheader("Route-instellingen")
 
-    with st.sidebar.form("Route"):
-        c1, c2 = st.columns(2)
-        start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
-        end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
-        max_dist = st.number_input("Max. afstand (m)", 500, 20000, 9000, 100, key="max_dist")
-        mandatory_text = st.text_input("Verplichte tussenpunten (gescheiden door komma's)", "909, 715")
-        add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
-
-    mandatory_nodes = []
-    if mandatory_text.strip():
-        try:
-            mandatory_nodes = [int(x.strip()) for x in mandatory_text.split(",") if x.strip()]
-        except ValueError:
-            st.sidebar.error("Gebruik alleen knooppuntnummers, gescheiden door komma's.")
+    max_dist = st.sidebar.slider("Max. afstand (m)", 500, 20000, 9000, 100, key="max_dist")
 
     ss = st.session_state
     STATE_KEYS = ("tp_route", "tp_distance", "tp_score", "tp_volgorde", "tp_weights")
+
+    add_route = route_bar(with_via=True, clear_keys=STATE_KEYS)
+    start, end, mandatory_nodes = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
     if calculate_button:
@@ -205,13 +198,13 @@ in welke volgorde je de punten aandoet; rechts staat dezelfde volgorde als lijst
     col_map, col_side = st.columns([3, 2], gap="medium")
 
     with col_map:
-        # Lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
-        # laag niet weg als je None doorgeeft, waardoor een gewiste route
-        # zichtbaar bleef.
-        st_folium(
-            base_map(gdf, nodes, current_weights),
-            feature_group_to_add=route_layer(df_route, nodes, volgorde) if route else folium.FeatureGroup(name="Route"),
-            width=700, height=620, returned_objects=[], key="tussenpunten_map",
+        # Altijd een FeatureGroup i.p.v. None: st_folium haalt een eerder
+        # toegevoegde laag niet weg als je None doorgeeft, waardoor een gewiste
+        # route zichtbaar bleef.
+        tap_map(
+            base_map(gdf, current_weights),
+            route_layer(df_route, nodes, volgorde) if route else folium.FeatureGroup(name="Route"),
+            nodes, key="tussenpunten_map", with_via=True,
         )
 
     with col_side:
@@ -231,10 +224,9 @@ in welke volgorde je de punten aandoet; rechts staat dezelfde volgorde als lijst
             st.markdown("""
 **1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
 
-**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+**2.** Tik op de kaart op je startpunt en daarna op je eindpunt.
 
-**3.** Vul beide nummers links in, zet de knooppunten waar je langs wilt in het
-veld *Verplichte tussenpunten*, en klik **Route toevoegen**.
+**3.** Tik op de punten waar je langs wilt, en tik op **Route toevoegen**.
             """)
             st.info(
                 "De route komt langs alle punten die je opgeeft. Het algoritme kiest zelf "

@@ -1,3 +1,4 @@
+streamlit>=1.67
 geopandas
 streamlit_folium 
 matplotlib

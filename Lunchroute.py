@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 from shapely.ops import linemerge
 from pareto_select import clicked_point_index
 from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
+from map_picker import picked_points, route_bar, tap_map, touch_style
 st.set_page_config(layout='wide')
+touch_style()
 
 
 @st.cache_data(show_spinner="Routes berekenen...")
@@ -90,9 +92,9 @@ om de kaart opnieuw te kleuren:
 🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
 **Een route berekenen**
-De zwarte punten op de kaart zijn knooppunten, elk met een eigen nummer — beweeg je muis
-over een punt om het nummer te zien. Vul een start- en eindknooppunt in, kies een minimale
-en maximale afstand, en klik op **Route toevoegen**.
+Tik of klik op de kaart om je startpunt te kiezen en daarna je eindpunt: de kaart zet ze
+vast op de dichtstbijzijnde kruising. Tik op **Start** of **Eind** boven de kaart om een punt
+te veranderen. Kies links de afstand en tik op **Route toevoegen**.
 
 **Het Pareto-front**
 Er is zelden één "beste" route: een route met een hogere score is vaak ook langer. Het
@@ -106,19 +108,15 @@ deze alternatieven; klik op een punt om die route op de kaart te tonen.
 weights, calculate_button = weight_form()
 
 st.sidebar.divider()
-st.sidebar.subheader("Route berekenen")
+st.sidebar.subheader("Route-instellingen")
 
-with st.sidebar.form("Route"):
-    c1, c2 = st.columns(2)
-    start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
-    end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
-    c3, c4 = st.columns(2)
-    min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
-    max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
-    add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
+min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
 
 ss = st.session_state
 STATE_KEYS = ("home_df", "home_weights", "home_pos", "home_cid")
+
+add_route = route_bar(clear_keys=STATE_KEYS)
+start, end, _ = picked_points()
 
 # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
 if calculate_button:
@@ -136,7 +134,7 @@ if add_route:
     pareto_df = labels_to_dataframe(pareto)
 
     if len(pareto_df) == 0:
-        st.error("Geen routes gevonden")
+        st.error("Geen routes gevonden. Vergroot de maximale afstand of kies punten dichter bij elkaar.")
         for k in STATE_KEYS:
             ss.pop(k, None)
     else:
@@ -172,14 +170,13 @@ gdf = calculate_new_column(gdf, **current_weights)
 col_map, col_side = st.columns([3, 2], gap="medium")
 
 with col_map:
-    # Een lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
+    # Altijd een FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
     # laag niet weg als je None doorgeeft, waardoor een gewiste route zichtbaar
-    # bleef. Met een lege groep wordt de oude vervangen zonder de hele kaart
-    # opnieuw te renderen.
-    st_folium(
-        base_map(gdf, nodes, current_weights),
-        feature_group_to_add=route_layer(df_route) if route else folium.FeatureGroup(name="Route"),
-        width=700, height=620, returned_objects=[], key="home_map",
+    # bleef. Zo wordt de oude vervangen zonder de hele kaart opnieuw te renderen.
+    tap_map(
+        base_map(gdf, current_weights),
+        route_layer(df_route) if route else folium.FeatureGroup(name="Route"),
+        nodes, key="home_map",
     )
 
 with col_side:
@@ -215,9 +212,9 @@ with col_side:
         st.markdown("""
 **1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
 
-**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+**2.** Tik op de kaart op je startpunt en daarna op je eindpunt.
 
-**3.** Vul beide nummers links in en klik **Route toevoegen**.
+**3.** Kies links de afstand en tik op **Route toevoegen**.
         """)
         st.info(
             "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "

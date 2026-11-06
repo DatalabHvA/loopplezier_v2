@@ -1,6 +1,6 @@
 """Snelle, herbruikbare basiskaart voor de loopplezier-pagina's.
 
-De achtergrond (gekleurd netwerk + knooppunten) hangt alleen af van de gekozen
+De achtergrond (het gekleurde netwerk) hangt alleen af van de gekozen
 gewichten, niet van welke route je aanklikt. Daarom bouwen we hem één keer per
 gewichten-set (``@st.cache_resource``) en maken we er per rerun alleen een
 goedkope deep-copy van. Het netwerk (9852 edges) wordt bovendien samengevoegd
@@ -14,6 +14,8 @@ import folium
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import streamlit as st
+from branca.element import MacroElement
+from jinja2 import Template
 
 N_BUCKETS = 11
 
@@ -34,31 +36,32 @@ def weights_key(weights):
 def weight_form(form_key="Score input"):
     """Gewicht-inputs in de sidebar, gegroepeerd in drie inklapbare secties.
 
-    Geeft ``(weights, calculate_button)`` terug. Door de twaalf factoren in te
-    klappen past de hele sidebar -- inclusief het routeformulier eronder -- op
-    één scherm, zodat 'Route toevoegen' zonder scrollen bereikbaar is.
+    Geeft ``(weights, calculate_button)`` terug. Schuifjes in plaats van
+    getalvelden: die werken met een vinger en roepen op een smartboard geen
+    schermtoetsenbord op. Door de twaalf factoren in te klappen past de hele
+    sidebar op één scherm.
     """
     st.sidebar.header("Omgevingsfactoren")
     st.sidebar.caption("Geef elke factor een gewicht van –10 tot +10.")
 
     with st.sidebar.form(form_key):
         with st.expander("Groen & natuur"):
-            bomen = st.number_input("Bomen", -10, 10, 0, 1, key="bomen")
-            parken = st.number_input("Parken", -10, 10, 3, 1, key="parken")
-            groen = st.number_input("Groen", -10, 10, 0, 1, key="groen")
-            water = st.number_input("Water", -10, 10, 1, 1, key="water")
-            schaduw = st.number_input("Schaduw", -10, 10, 0, 1, key="schaduw")
+            bomen = st.slider("Bomen", -10, 10, 0, 1, key="bomen")
+            parken = st.slider("Parken", -10, 10, 3, 1, key="parken")
+            groen = st.slider("Groen", -10, 10, 0, 1, key="groen")
+            water = st.slider("Water", -10, 10, 1, 1, key="water")
+            schaduw = st.slider("Schaduw", -10, 10, 0, 1, key="schaduw")
 
         with st.expander("Voorzieningen"):
-            horeca = st.number_input("Horeca", -10, 10, 0, 1, key="horeca")
-            winkels = st.number_input("Winkels", -10, 10, 0, 1, key="winkels")
-            ov = st.number_input("Openbaar vervoer", -10, 10, 0, 1, key="ov")
-            monumenten = st.number_input("Monumenten", -10, 10, 0, 1, key="monumenten")
+            horeca = st.slider("Horeca", -10, 10, 0, 1, key="horeca")
+            winkels = st.slider("Winkels", -10, 10, 0, 1, key="winkels")
+            ov = st.slider("Openbaar vervoer", -10, 10, 0, 1, key="ov")
+            monumenten = st.slider("Monumenten", -10, 10, 0, 1, key="monumenten")
 
         with st.expander("Veiligheid & comfort"):
-            ovl = st.number_input("Openbare verlichting", -10, 10, 0, 1, key="ovl")
-            verkeerslichten = st.number_input("Verkeerslichten", -10, 10, 0, 1, key="verkeerslichten")
-            wegen = st.number_input("Drukke wegen", -10, 10, -1, 1, key="wegen")
+            ovl = st.slider("Openbare verlichting", -10, 10, 0, 1, key="ovl")
+            verkeerslichten = st.slider("Verkeerslichten", -10, 10, 0, 1, key="verkeerslichten")
+            wegen = st.slider("Drukke wegen", -10, 10, -1, 1, key="wegen")
 
         calculate_button = st.form_submit_button("Bereken", use_container_width=True)
 
@@ -84,18 +87,49 @@ def _bucketed_geojson(_gdf):
     return diss.to_json()
 
 
+class TouchMap(MacroElement):
+    """Maakt de Leaflet-kaart prettig met een vinger op een groot touchscreen."""
+
+    _template = Template("""
+        {% macro script(this, kwargs) %}
+        // Een vinger trilt tijdens een tik; zonder speling telt dat als slepen.
+        L.Draggable.prototype.options.clickTolerance = 15;
+
+        // st_folium meldt alleen een gewijzigde klik. Een verschil van een tiende
+        // millimeter zorgt dat ook een tweede tik op dezelfde plek doorkomt.
+        {{ this._parent.get_name() }}.on('click', function (event) {
+            event.latlng.lat += Math.random() * 1e-9;
+        });
+
+        var touchStyle = document.createElement('style');
+        touchStyle.textContent =
+            '.leaflet-bar a, .leaflet-touch .leaflet-bar a' +
+            '{width:max(56px,5vw);height:max(56px,5vw);line-height:max(56px,5vw);' +
+            'font-size:max(32px,3vw);}' +
+            '#map_div{height:100vh !important;}';
+        document.head.appendChild(touchStyle);
+
+        // De hoogte komt uit de CSS van de pagina: houd Leaflet daarmee in de pas.
+        new ResizeObserver(function () {
+            {{ this._parent.get_name() }}.invalidateSize();
+        }).observe(document.body);
+        {% endmacro %}
+    """)
+
+
 @st.cache_resource(show_spinner=False)
-def _build_base_map(_gdf, _nodes, wkey):
+def _build_base_map(_gdf, wkey):
     """Bouw de zware basiskaart één keer per gewichten-set (wkey).
 
-    ``_gdf``/``_nodes`` worden door de underscore niet gehasht; de cache-sleutel
-    is enkel ``wkey``. De aanroeper zorgt dat ``_gdf['score_totaal']`` bij die
-    gewichten hoort voordat een nieuwe sleutel voor het eerst wordt gebouwd.
+    ``_gdf`` wordt door de underscore niet gehasht; de cache-sleutel is enkel
+    ``wkey``. De aanroeper zorgt dat ``_gdf['score_totaal']`` bij die gewichten
+    hoort voordat een nieuwe sleutel voor het eerst wordt gebouwd.
     """
     center = [_gdf.geometry.centroid.y.mean(), _gdf.geometry.centroid.x.mean()]
-    # prefer_canvas: teken de duizenden knooppunten/lijnen op een canvas i.p.v.
-    # losse SVG-paths -> veel sneller renderen en pannen in de browser.
-    m = folium.Map(location=center, zoom_start=14, prefer_canvas=True)
+    # prefer_canvas: teken het netwerk op een canvas i.p.v. losse SVG-paths ->
+    # veel sneller renderen en pannen in de browser.
+    # double_click_zoom uit: twee snelle tikken zijn twee gekozen punten.
+    m = folium.Map(location=center, zoom_start=14, prefer_canvas=True, double_click_zoom=False)
 
     folium.GeoJson(
         _bucketed_geojson(_gdf),
@@ -103,26 +137,19 @@ def _build_base_map(_gdf, _nodes, wkey):
         style_function=lambda f: {"color": f["properties"]["color"]},
     ).add_to(m)
 
-    nodes_min = _nodes[["knooppunt", "geometry"]] if "knooppunt" in _nodes.columns else _nodes
-    folium.GeoJson(
-        nodes_min,
-        name="Nodes",
-        marker=folium.CircleMarker(radius=2, weight=0, fill_color="#000000", fill_opacity=1),
-        tooltip=folium.GeoJsonTooltip(fields=["knooppunt"], labels=True, sticky=True),
-    ).add_to(m)
-
+    TouchMap().add_to(m)
     return m
 
 
-def base_map(_gdf, _nodes, weights):
+def base_map(_gdf, weights):
     """Geef een verse kopie van de (gecachte) basiskaart voor deze gewichten.
 
-    De zware achtergrond (gebucketed netwerk + knooppunten) wordt één keer per
-    gewichten-set gebouwd; per rerun maken we er enkel een goedkope deep-copy
-    van. We geven bewust een KOPIE terug omdat st_folium intern
+    De zware achtergrond (gebucketed netwerk) wordt één keer per gewichten-set
+    gebouwd; per rerun maken we er enkel een goedkope deep-copy van. We geven
+    bewust een KOPIE terug omdat st_folium intern
     ``feature_group_to_add.add_to(map)`` doet en de meegegeven kaart dus muteert
     -- zo blijft het gecachte origineel schoon (geen oude routes), terwijl de
     achtergrond-string identiek blijft zodat st_folium enkel de routelaag
-    bijwerkt i.p.v. het hele netwerk + alle knooppunten opnieuw te tekenen.
+    bijwerkt i.p.v. het hele netwerk opnieuw te tekenen.
     """
-    return copy.deepcopy(_build_base_map(_gdf, _nodes, weights_key(weights)))
+    return copy.deepcopy(_build_base_map(_gdf, weights_key(weights)))

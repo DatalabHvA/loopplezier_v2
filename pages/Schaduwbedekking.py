@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 from shapely.ops import linemerge
 from pareto_select import clicked_point_index
 from map_utils import base_map, DEFAULT_WEIGHTS, weights_key, weight_form
+from map_picker import picked_points, route_bar, tap_map, touch_style
 st.set_page_config(layout='wide')
+touch_style()
 
 
 @st.cache_data(show_spinner="Routes berekenen...")
@@ -90,9 +92,8 @@ In het menu links geef je elke omgevingsfactor een gewicht tussen –10 en +10. 
 🟢 groen = aantrekkelijk &nbsp;·&nbsp; 🟡 geel = neutraal &nbsp;·&nbsp; 🔴 rood = minder aantrekkelijk
 
 **Een route berekenen**
-Vul een start- en eindknooppunt in (de zwarte punten op de kaart; beweeg je muis over een
-punt om het nummer te zien), stel in hoeveel schaduw je minimaal wilt, en klik op
-**Route toevoegen**.
+Tik of klik op de kaart op je startpunt en daarna op je eindpunt, stel links in hoeveel
+schaduw je minimaal wilt, en tik op **Route toevoegen**.
 
 **Schaduw versus score, en het Pareto-front**
 De schaduwrijkste route is zelden ook de aantrekkelijkste — meer schaduw gaat vaak ten
@@ -107,20 +108,16 @@ op de kaart te zien.
     weights, calculate_button = weight_form()
 
     st.sidebar.divider()
-    st.sidebar.subheader("Route berekenen")
+    st.sidebar.subheader("Route-instellingen")
 
-    with st.sidebar.form("Route"):
-        c1, c2 = st.columns(2)
-        start = c1.number_input("Start", 0, 3100, 2913, 1, key="start")
-        end = c2.number_input("Eind", 0, 3100, 3045, 1, key="end")
-        c3, c4 = st.columns(2)
-        min_dist = c3.number_input("Min. afstand (m)", 500, 10000, 500, 100, key="min_dist")
-        max_dist = c4.number_input("Max. afstand (m)", 500, 10000, 3000, 100, key="max_dist")
-        min_shadow = st.slider("Minimale schaduwbedekking (%)", 0, 100, 30)
-        add_route = st.form_submit_button("Route toevoegen", use_container_width=True)
+    min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
+    min_shadow = st.sidebar.slider("Minimale schaduwbedekking (%)", 0, 100, 30)
 
     ss = st.session_state
     STATE_KEYS = ("shadow_df", "shadow_weights", "shadow_pos", "shadow_cid")
+
+    add_route = route_bar(clear_keys=STATE_KEYS)
+    start, end, _ = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
     if calculate_button:
@@ -140,7 +137,7 @@ op de kaart te zien.
         pareto_df = pareto_to_df_2d(pareto_labels)
 
         if len(pareto_df) == 0:
-            st.error("Geen routes gevonden")
+            st.error("Geen routes gevonden. Vergroot de maximale afstand of kies punten dichter bij elkaar.")
             for k in STATE_KEYS:
                 ss.pop(k, None)
         else:
@@ -184,13 +181,13 @@ op de kaart te zien.
     col_map, col_side = st.columns([3, 2], gap="medium")
 
     with col_map:
-        # Lege FeatureGroup i.p.v. None: st_folium haalt een eerder toegevoegde
-        # laag niet weg als je None doorgeeft, waardoor een gewiste route
-        # zichtbaar bleef.
-        st_folium(
-            base_map(gdf, nodes, current_weights),
-            feature_group_to_add=route_layer(df_route) if route else folium.FeatureGroup(name="Route"),
-            width=700, height=620, returned_objects=[], key="shadow_map",
+        # Altijd een FeatureGroup i.p.v. None: st_folium haalt een eerder
+        # toegevoegde laag niet weg als je None doorgeeft, waardoor een gewiste
+        # route zichtbaar bleef.
+        tap_map(
+            base_map(gdf, current_weights),
+            route_layer(df_route) if route else folium.FeatureGroup(name="Route"),
+            nodes, key="shadow_map",
         )
 
     with col_side:
@@ -228,10 +225,9 @@ op de kaart te zien.
             st.markdown("""
 **1.** Stel links de gewichten in en klik **Bereken** — de kaart kleurt mee.
 
-**2.** Zoek op de kaart je start- en eindknooppunt (de zwarte punten).
+**2.** Tik op de kaart op je startpunt en daarna op je eindpunt.
 
-**3.** Vul beide nummers links in, kies hoeveel schaduw je minimaal wilt,
-en klik **Route toevoegen**.
+**3.** Kies links hoeveel schaduw je minimaal wilt, en tik op **Route toevoegen**.
             """)
             st.info(
                 "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "

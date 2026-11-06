@@ -484,7 +484,7 @@ def plot_pareto(df, selected_shadow=None, selected_score=None, selected_distance
         y=df["score_density"],
         mode="markers",
         name="Andere mogelijke routes",
-        marker=dict(size=8, opacity=0.7),
+        marker=dict(size=16, opacity=0.7),
         customdata=df[["afstand"]],
 
         hovertemplate=
@@ -502,7 +502,7 @@ def plot_pareto(df, selected_shadow=None, selected_score=None, selected_distance
             y=[selected_score],
             mode="markers",
             name="Geselecteerde route",
-            marker=dict(size=10, color="red"),
+            marker=dict(size=18, color="red"),
 
             hovertemplate=
                 "Schaduw: %{x:.2f}%<br>" +

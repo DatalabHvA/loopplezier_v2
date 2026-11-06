@@ -551,7 +551,7 @@ def plot_pareto(df, selected_gap=None, selected_score=None, selected_distance=No
         y=df["gemiddelde_score"],
         mode="markers",
         name="Andere mogelijke routes",
-        marker=dict(size=8, opacity=0.7),
+        marker=dict(size=16, opacity=0.7),
         customdata=df["afstand"],
 
         hovertemplate=
@@ -568,7 +568,7 @@ def plot_pareto(df, selected_gap=None, selected_score=None, selected_distance=No
             y=[selected_score],
             mode="markers",
             name="Geselecteerde route",
-            marker=dict(size=10, color="red"),
+            marker=dict(size=18, color="red"),
 
             hovertemplate=
                 "Langste stuk zonder bankje: %{x:.0f} m<br>" +
@@ -1040,7 +1040,7 @@ def plot_pareto_2d(
             y=df["gemiddelde_score"],
             mode="markers",
             name="Andere mogelijke routes",
-            marker=dict(size=8, opacity=0.7),
+            marker=dict(size=16, opacity=0.7),
             customdata=df["id"],
             hovertemplate=
             "Route ID: %{customdata}<br>" +
@@ -1063,7 +1063,7 @@ def plot_pareto_2d(
                 mode="markers",
                 name="Geselecteerde route",
                 marker=dict(
-                    size=10,
+                    size=18,
                     color="red"
                 ),
 

@@ -16,6 +16,9 @@ def small_matrices(a, s, g_max, start, end):
         np.where(dist_end < g_max)[0]
     )
 
+    if start not in reachable or end not in reachable:
+        return None
+
     a_new = a[np.ix_(reachable, reachable)]
     s_new = s[np.ix_(reachable, reachable)]
 
@@ -33,20 +36,15 @@ def preprocess(gdf, start, end, g_max, mandatory_nodes):
 
     s = s * a
 
-    a, s, start, end, indices = small_matrices(a, s, g_max, start, end)
+    reduced = small_matrices(a, s, g_max, start, end)
+    if reduced is None:
+        return None
 
-    # voeg missende mandatory nodes toe
-    missing = [n for n in mandatory_nodes if n not in indices]
-    if missing:
-        indices = np.unique(np.concatenate([indices, missing]))
-        a = a[np.ix_(indices, indices)]
-        s = s[np.ix_(indices, indices)]
+    a, s, start, end, indices = reduced
 
-        a[a >= 100000] = np.inf
-        s[a == np.inf] = 0
-
-        start = int(np.where(indices == start)[0][0])
-        end   = int(np.where(indices == end)[0][0])
+    # Een tussenpunt dat hier niet bij zit, past nooit binnen de maximale afstand.
+    if any(n not in indices for n in mandatory_nodes):
+        return None
 
     return a, s, start, end, indices
 
@@ -177,6 +175,9 @@ def grasp_route(
 
             path, d, sc = res
 
+            if total_length + d > g_max:
+                continue
+
             # utility
             value = sc / (d +1e-6)
 
@@ -206,9 +207,6 @@ def grasp_route(
         chosen = random.choice(rcl)
 
         node, path, d, sc, value = chosen
-
-        if total_length + d > g_max:
-            continue
 
         # voeg path toe
         route.extend(path[1:])
@@ -315,13 +313,18 @@ def calculate_mandatory_route(
     import time as _time
     t_deadline = _time.perf_counter() + t_budget
 
-    a_final, s_final, start_final, end_final, indices = preprocess(
+    prepared = preprocess(
         gdf,
         start=start,
         end=end,
         g_max=max_dist,
         mandatory_nodes=mandatory_nodes
     )
+
+    if prepared is None:
+        return None, None, None
+
+    a_final, s_final, start_final, end_final, indices = prepared
 
     mandatory_local = [
         int(np.where(indices == n)[0][0])
