@@ -141,13 +141,12 @@ op de kaart te zien.
     st.sidebar.divider()
     st.sidebar.subheader("Route-instellingen")
 
-    min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
     max_bankjes_afstand = st.sidebar.slider("Max. afstand tussen bankjes (m)", 100, 2000, 500, 50)
 
     ss = st.session_state
     STATE_KEYS = ("bankjes_df", "bankjes_weights", "bankjes_pos", "bankjes_cid")
 
-    add_route = route_bar(clear_keys=STATE_KEYS)
+    add_route, (min_dist, max_dist) = route_bar(clear_keys=STATE_KEYS)
     start, end, _ = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route

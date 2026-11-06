@@ -94,7 +94,7 @@ om de kaart opnieuw te kleuren:
 **Een route berekenen**
 Tik of klik op de kaart om je startpunt te kiezen en daarna je eindpunt: de kaart zet ze
 vast op de dichtstbijzijnde kruising. Tik op **Start** of **Eind** boven de kaart om een punt
-te veranderen. Kies links de afstand en tik op **Route toevoegen**.
+te veranderen. Kies boven de kaart de afstand en tik op **Route toevoegen**.
 
 **Het Pareto-front**
 Er is zelden één "beste" route: een route met een hogere score is vaak ook langer. Het
@@ -107,15 +107,10 @@ deze alternatieven; klik op een punt om die route op de kaart te tonen.
 
 weights, calculate_button = weight_form()
 
-st.sidebar.divider()
-st.sidebar.subheader("Route-instellingen")
-
-min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
-
 ss = st.session_state
 STATE_KEYS = ("home_df", "home_weights", "home_pos", "home_cid")
 
-add_route = route_bar(clear_keys=STATE_KEYS)
+add_route, (min_dist, max_dist) = route_bar(clear_keys=STATE_KEYS)
 start, end, _ = picked_points()
 
 # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
@@ -214,7 +209,7 @@ with col_side:
 
 **2.** Tik op de kaart op je startpunt en daarna op je eindpunt.
 
-**3.** Kies links de afstand en tik op **Route toevoegen**.
+**3.** Kies boven de kaart de afstand en tik op **Route toevoegen**.
         """)
         st.info(
             "Na het berekenen verschijnt hier een grafiek met alternatieve routes. "

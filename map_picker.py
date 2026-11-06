@@ -24,6 +24,15 @@ HINTS = {
 }
 MARKER_COLORS = {START: "#1a9641", END: "#d7191c", VIA: "#2b6cb0"}
 
+# Afstand-schuif in de routebalk. De Pareto-pagina's zoeken binnen een bereik;
+# de pagina met tussenpunten kent alleen een maximum.
+DISTANCE_RANGE = dict(
+    label="Afstand (m)", min_value=500, max_value=10000, value=(500, 3000), step=100, key="afstand",
+)
+DISTANCE_MAX = dict(
+    label="Max. afstand (m)", min_value=500, max_value=20000, value=9000, step=100, key="max_dist",
+)
+
 # Verder dan dit van elk knooppunt = naast het netwerk getikt.
 MAX_SNAP_M = 250
 METERS_PER_DEGREE = 111_320
@@ -139,10 +148,12 @@ def _on_tap(map_key, nodes, with_via):
 
 
 def route_bar(with_via=False, clear_keys=()):
-    """Balk boven de kaart: wat kies je nu, en de knop om de route te berekenen.
+    """Balk boven de kaart: wat kies je nu, hoe ver, en de knop om de route te berekenen.
 
-    Geeft ``True`` terug in de rerun waarin op 'Route toevoegen' is getikt.
-    'Wissen' haalt de gekozen punten en de ``clear_keys`` (de route) weg.
+    Geeft ``(add_route, afstand)`` terug. ``add_route`` is ``True`` in de rerun
+    waarin op 'Route toevoegen' is getikt; ``afstand`` is ``(min, max)``, of met
+    ``with_via`` alleen het maximum. 'Wissen' haalt de gekozen punten en de
+    ``clear_keys`` (de route) weg.
     """
     ss = st.session_state
     start, end, via = picked_points()
@@ -157,11 +168,12 @@ def route_bar(with_via=False, clear_keys=()):
         chosen = (start if option == START else end) is not None
         return f"{ICONS[option]} {option}{' ✓' if chosen else ''}"
 
-    c_mode, c_add, c_clear = st.columns([5, 3, 1.5], vertical_alignment="bottom")
+    c_mode, c_dist, c_add, c_clear = st.columns([5, 4, 3, 1.5], vertical_alignment="bottom")
     c_mode.segmented_control(
         "Wat kies je op de kaart?", options, key=MODE_KEY, required=True,
         format_func=label, width="stretch",
     )
+    distance = c_dist.slider(**(DISTANCE_MAX if with_via else DISTANCE_RANGE))
     add_route = c_add.button(
         "Route toevoegen", type="primary", width="stretch",
         disabled=start is None or end is None or (with_via and not via),
@@ -175,7 +187,7 @@ def route_bar(with_via=False, clear_keys=()):
         st.caption("Tik op **Route toevoegen**, of tik op de kaart om het gekozen punt te verplaatsen.")
     else:
         st.caption(HINTS[ss[MODE_KEY]])
-    return add_route
+    return add_route, distance
 
 
 def _marker(row, kind, text):

@@ -110,13 +110,12 @@ op de kaart te zien.
     st.sidebar.divider()
     st.sidebar.subheader("Route-instellingen")
 
-    min_dist, max_dist = st.sidebar.slider("Afstand (m)", 500, 10000, (500, 3000), 100, key="afstand")
     min_shadow = st.sidebar.slider("Minimale schaduwbedekking (%)", 0, 100, 30)
 
     ss = st.session_state
     STATE_KEYS = ("shadow_df", "shadow_weights", "shadow_pos", "shadow_cid")
 
-    add_route = route_bar(clear_keys=STATE_KEYS)
+    add_route, (min_dist, max_dist) = route_bar(clear_keys=STATE_KEYS)
     start, end, _ = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route

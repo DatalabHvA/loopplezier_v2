@@ -142,15 +142,10 @@ in welke volgorde je de punten aandoet; rechts staat dezelfde volgorde als lijst
 
     weights, calculate_button = weight_form()
 
-    st.sidebar.divider()
-    st.sidebar.subheader("Route-instellingen")
-
-    max_dist = st.sidebar.slider("Max. afstand (m)", 500, 20000, 9000, 100, key="max_dist")
-
     ss = st.session_state
     STATE_KEYS = ("tp_route", "tp_distance", "tp_score", "tp_volgorde", "tp_weights")
 
-    add_route = route_bar(with_via=True, clear_keys=STATE_KEYS)
+    add_route, max_dist = route_bar(with_via=True, clear_keys=STATE_KEYS)
     start, end, mandatory_nodes = picked_points()
 
     # 'Bereken' = alleen de kaart herkleuren; verwijder een eventuele actieve route
