@@ -143,8 +143,8 @@ def _on_tap(map_key, nodes, with_via):
         ss[STATE[mode]] = node
         if mode == START:
             ss[MODE_KEY] = END
-        elif with_via:
-            ss[MODE_KEY] = VIA
+        else:
+            ss[MODE_KEY] = VIA if with_via else START
 
 
 def route_bar(with_via=False, clear_keys=()):
@@ -160,7 +160,7 @@ def route_bar(with_via=False, clear_keys=()):
     options = [START, END] + ([VIA] if with_via else [])
 
     if ss.get(MODE_KEY) not in options:
-        ss[MODE_KEY] = START if start is None else END if end is None else options[-1]
+        ss[MODE_KEY] = END if start is not None and end is None else VIA if with_via and start is not None else START
 
     def label(option):
         if option == VIA:
